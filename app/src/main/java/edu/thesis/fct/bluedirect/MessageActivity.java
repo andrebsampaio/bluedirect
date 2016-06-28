@@ -8,17 +8,21 @@ import edu.thesis.fct.bluedirect.wifi.WiFiDirectBroadcastReceiver;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 
 /**
  * Activity for the group chat view
@@ -99,7 +103,12 @@ public class MessageActivity extends Activity {
     private byte[] UriToBytes(Uri uri){
         try {
             InputStream iStream = getContentResolver().openInputStream(uri);
-            byte[] inputData = getBytes(iStream);
+            Cursor returnCursor =
+                    getContentResolver().query(uri, null, null, null, null);
+            int nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+            returnCursor.moveToFirst();
+
+            byte[] inputData = getBytes(iStream, returnCursor.getString(nameIndex));
             return inputData;
         } catch (FileNotFoundException e) {
             e.printStackTrace();
@@ -109,16 +118,27 @@ public class MessageActivity extends Activity {
         return null;
     }
 
-    static byte[] getBytes(InputStream inputStream) throws IOException {
+    static byte[] getBytes(InputStream inputStream, String name) throws IOException {
         ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(byteBuffer);
+
         int bufferSize = 1024;
         byte[] buffer = new byte[bufferSize];
 
+        dos.writeUTF(name);
+
         int len = 0;
         while ((len = inputStream.read(buffer)) != -1) {
-            byteBuffer.write(buffer, 0, len);
+            dos.write(buffer, 0, len);
         }
+        dos.flush();
         return byteBuffer.toByteArray();
+    }
+
+    private static byte[] intToBytes( final int i ) {
+        ByteBuffer bb = ByteBuffer.allocate(4);
+        bb.putInt(i);
+        return bb.array();
     }
 
 	/**

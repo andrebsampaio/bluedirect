@@ -1,8 +1,14 @@
 package edu.thesis.fct.bluedirect.router;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import edu.thesis.fct.bluedirect.MessageActivity;
@@ -211,11 +217,41 @@ public class Receiver implements Runnable {
         return bFile;
     }
 
+    public static int byteArrayToInt(byte[] b)
+    {
+        return   b[3] & 0xFF |
+                (b[2] & 0xFF) << 8 |
+                (b[1] & 0xFF) << 16 |
+                (b[0] & 0xFF) << 24;
+    }
+
 
     class SavePhotoTask extends AsyncTask<byte[], String, String> {
         @Override
-        protected String doInBackground(byte[]... jpeg) {
-            File photo=new File(Environment.getExternalStorageDirectory(), "photo.jpg");
+        protected String doInBackground(byte[]... params) {
+
+            ByteArrayInputStream bis = new ByteArrayInputStream(params[0]);
+            DataInputStream dis = new DataInputStream(bis);
+
+            String name = "";
+            byte [] data = null;
+            try {
+                name = dis.readUTF();
+
+                byte [] b = new byte[1024];
+                int len = 0;
+                ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+
+                while ((len = dis.read(b)) != -1) {
+                    byteBuffer.write(b, 0, len);
+                }
+
+                data = byteBuffer.toByteArray();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            File photo=new File(Environment.getExternalStorageDirectory(), name +"");
 
             if (photo.exists()) {
                 photo.delete();
@@ -224,7 +260,7 @@ public class Receiver implements Runnable {
             try {
                 FileOutputStream fos=new FileOutputStream(photo.getPath());
 
-                fos.write(jpeg[0]);
+                fos.write(data);
                 fos.close();
             }
             catch (java.io.IOException e) {
@@ -241,6 +277,7 @@ public class Receiver implements Runnable {
             intent.setDataAndType(Uri.fromFile(new File(s)), "image/*");
             activity.startActivity(intent);
         }
+
     }
 
 	/**
