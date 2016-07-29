@@ -60,7 +60,7 @@ public class PromptPasswordFragment extends DialogFragment {
 						String password = ((TextView) PromptPasswordFragment.this.mContentView
 								.findViewById(R.id.password)).getText().toString();
 
-						PromptPasswordFragment.this.activty.connectToAccessPoint(ssid, password);
+						//PromptPasswordFragment.this.activty.connectToAccessPoint(ssid, password);
 
 					}
 				}).setNegativeButton(R.string.label_cancel, new DialogInterface.OnClickListener() {

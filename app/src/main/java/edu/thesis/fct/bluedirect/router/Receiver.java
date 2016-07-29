@@ -7,13 +7,15 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.math.BigInteger;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import edu.thesis.fct.bluedirect.MessageActivity;
 import edu.thesis.fct.bluedirect.WiFiDirectActivity;
+import edu.thesis.fct.bluedirect.bt.BluetoothServer;
 import edu.thesis.fct.bluedirect.config.Configuration;
+import edu.thesis.fct.bluedirect.onPacketReceivedListener;
 import edu.thesis.fct.bluedirect.router.tcp.TcpReceiver;
 import edu.thesis.fct.bluedirect.ui.DeviceDetailFragment;
 import edu.thesis.fct.bluedirect.wifi.WiFiDirectBroadcastReceiver;
@@ -33,6 +35,17 @@ public class Receiver implements Runnable {
 	 * Flag if the receiver has been running to prevent overzealous thread spawning
 	 */
 	public static boolean running = false;
+
+	private static List<onPacketReceivedListener> listeners = new ArrayList<onPacketReceivedListener>();
+
+	public static void addListener(onPacketReceivedListener toAdd){
+		listeners.add(toAdd);
+	}
+
+	/*
+	 * A queue for received packets
+	 */
+	public ConcurrentLinkedQueue<Packet> packetQueue = new ConcurrentLinkedQueue<Packet>();
 	
 	/**
 	 * A ref to the activity
@@ -52,14 +65,13 @@ public class Receiver implements Runnable {
 	 * Main thread runner
 	 */
 	public void run() {
-		/*
-		 * A queue for received packets
-		 */
-		ConcurrentLinkedQueue<Packet> packetQueue = new ConcurrentLinkedQueue<Packet>();
+
+
 
 		/*
 		 * Receiver thread 
 		 */
+
 		new Thread(new TcpReceiver(Configuration.RECEIVE_PORT, packetQueue)).start();
 
 		Packet p;
@@ -93,20 +105,32 @@ public class Receiver implements Runnable {
 				for (AllEncompasingP2PClient c : MeshNetworkManager.routingTable.values()) {
 					if (c.getMac().equals(MeshNetworkManager.getSelf().getMac()) || c.getMac().equals(p.getSenderMac()))
 						continue;
-					Packet update = new Packet(Packet.TYPE.UPDATE, Packet.getMacAsBytes(p.getSenderMac()), c.getMac(),
-							MeshNetworkManager.getSelf().getMac());
+					byte[] macs = new byte[13];
+
+					byte[] wMac = Packet.getMacAsBytes(p.getSenderMac());
+					for (int i = 0; i <= 5; i++) {
+						macs[i] = wMac[i - 5];
+					}
+
+					wMac = Packet.getMacAsBytes(p.getBtSMac());
+					for (int i = 6; i <= 13; i++) {
+						macs[i] = wMac[i - 13];
+					}
+
+					Packet update = new Packet(Packet.TYPE.UPDATE, macs, c.getMac(),
+							MeshNetworkManager.getSelf().getMac(), p.getBtSMac(), Configuration.getBluetoothSelfMac(activity));
 					Sender.queuePacket(update);
 				}
 
 				MeshNetworkManager.routingTable.put(p.getSenderMac(),
-						new AllEncompasingP2PClient(p.getSenderMac(), p.getSenderIP(), p.getSenderMac(),
-								MeshNetworkManager.getSelf().getMac()));
+						new AllEncompasingP2PClient(p.getBtSMac(), p.getSenderMac(), p.getSenderIP(), p.getSenderMac(),
+								MeshNetworkManager.getSelf().getMac(), MeshNetworkManager.getSelf().getGroupID(),null));
 
 				// Send routing table back as HELLO_ACK
 				byte[] rtable = MeshNetworkManager.serializeRoutingTable();
 
 				Packet ack = new Packet(Packet.TYPE.HELLO_ACK, rtable, p.getSenderMac(), MeshNetworkManager.getSelf()
-						.getMac());
+						.getMac(), p.getBtSMac(), Configuration.getBluetoothSelfMac(activity));
 				Sender.queuePacket(ack);
 				somebodyJoined(p.getSenderMac());
 				updatePeerList();
@@ -115,16 +139,20 @@ public class Receiver implements Runnable {
 				if (p.getMac().equals(MeshNetworkManager.getSelf().getMac())) {
 					//if we get a hello ack populate the table
 					if (p.getType().equals(Packet.TYPE.HELLO_ACK)) {
-						MeshNetworkManager.deserializeRoutingTableAndAdd(p.getData());
+						AllEncompasingP2PClient a = MeshNetworkManager.deserializeRoutingTableAndAdd(p.getData());
 						MeshNetworkManager.getSelf().setGroupOwnerMac(p.getSenderMac());
+						MeshNetworkManager.getSelf().setGroupID(a.getGroupID());
 						somebodyJoined(p.getSenderMac());
 						updatePeerList();
+						if (!BluetoothServer.running)
+							Configuration.startBluetoothConnections(activity,this);
 					} else if (p.getType().equals(Packet.TYPE.UPDATE)) {
 						//if it's an update, add to the table
 						String emb_mac = Packet.getMacBytesAsString(p.getData(), 0);
+						String emb_bt_mac = Packet.getMacBytesAsString(p.getData(), 6);
 						MeshNetworkManager.routingTable.put(emb_mac,
-								new AllEncompasingP2PClient(emb_mac, p.getSenderIP(), p.getMac(), MeshNetworkManager
-										.getSelf().getMac()));
+								new AllEncompasingP2PClient(emb_bt_mac, emb_mac, p.getSenderIP(), p.getMac(), MeshNetworkManager
+										.getSelf().getMac(), MeshNetworkManager.getSelf().getGroupID(),null));
 
 						final String message = emb_mac + " joined the conversation";
 						final String name = p.getSenderMac();
@@ -143,29 +171,9 @@ public class Receiver implements Runnable {
 
 					} else if (p.getType().equals(Packet.TYPE.QUERY) || p.getType().equals(Packet.TYPE.FILE)) {
 
-                        if (p.getType().equals(Packet.TYPE.QUERY)){
-                            //If it's a message display the message and update the table if they're not there
-                            // for whatever reason
-                            final String message = p.getSenderMac() + " searched:\n" + new String(p.getData());
-                            final String msg = new String(p.getData());
-                            final String name = p.getSenderMac();
-
-                            sendFiles(p.getSenderMac());
-
-                            activity.runOnUiThread(new Runnable() {
-
-                                @Override
-                                public void run() {
-                                    if (activity.isVisible) {
-                                        Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
-                                    } else {
-                                        MessageActivity.addMessage(name, msg);
-                                    }
-                                }
-                            });
-                        } else {
-                            new SavePhotoTask().execute(p.getData());
-                        }
+						for (onPacketReceivedListener l : listeners){
+							l.onPacketReceived(p);
+						}
 
 						if (!MeshNetworkManager.routingTable.contains(p.getSenderMac())) {
 							/*
@@ -173,49 +181,26 @@ public class Receiver implements Runnable {
 							 * guy isn't in it
 							 */
 							MeshNetworkManager.routingTable.put(p.getSenderMac(),
-									new AllEncompasingP2PClient(p.getSenderMac(), p.getSenderIP(), p.getSenderMac(),
-											MeshNetworkManager.getSelf().getGroupOwnerMac()));
+									new AllEncompasingP2PClient(p.getBtSMac(), p.getSenderMac(), p.getSenderIP(), p.getSenderMac(),
+											MeshNetworkManager.getSelf().getGroupOwnerMac(), MeshNetworkManager.getSelf().getGroupID(),null));
+
+							updatePeerList();
 						}
-
-
-						updatePeerList();
-					}
-				} else {
-					// otherwise forward it if you're not the recipient
-					int ttl = p.getTtl();
-					// Have a ttl so that they don't bounce around forever
-					ttl--;
-					if (ttl > 0) {
-						Sender.queuePacket(p);
-						p.setTtl(ttl);
+					} else {
+						// otherwise forward it if you're not the recipient
+						int ttl = p.getTtl();
+						// Have a ttl so that they don't bounce around forever
+						ttl--;
+						if (ttl > 0) {
+							p.setTtl(ttl);
+							Sender.queuePacket(p);
+						}
 					}
 				}
-			}
 
+			}
 		}
 	}
-
-    private static void sendFiles(String rcvMac){
-        File file = new File(Environment.getExternalStorageDirectory() + File.separator + "photo.jpg");
-        Sender.queuePacket(new Packet(Packet.TYPE.FILE, fileToBytes(file), rcvMac, WiFiDirectBroadcastReceiver.MAC));
-    }
-
-    private static byte[] fileToBytes(File file) {
-        FileInputStream fileInputStream = null;
-        byte[] bFile = new byte[(int) file.length()];
-        try
-        {
-            //convert file into array of bytes
-            fileInputStream = new FileInputStream(file);
-            fileInputStream.read(bFile);
-            fileInputStream.close();
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
-        return bFile;
-    }
 
     public static int byteArrayToInt(byte[] b)
     {
@@ -225,60 +210,6 @@ public class Receiver implements Runnable {
                 (b[0] & 0xFF) << 24;
     }
 
-
-    class SavePhotoTask extends AsyncTask<byte[], String, String> {
-        @Override
-        protected String doInBackground(byte[]... params) {
-
-            ByteArrayInputStream bis = new ByteArrayInputStream(params[0]);
-            DataInputStream dis = new DataInputStream(bis);
-
-            String name = "";
-            byte [] data = null;
-            try {
-                name = dis.readUTF();
-
-                byte [] b = new byte[1024];
-                int len = 0;
-                ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
-
-                while ((len = dis.read(b)) != -1) {
-                    byteBuffer.write(b, 0, len);
-                }
-
-                data = byteBuffer.toByteArray();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            File photo=new File(Environment.getExternalStorageDirectory(), name +"");
-
-            if (photo.exists()) {
-                photo.delete();
-            }
-
-            try {
-                FileOutputStream fos=new FileOutputStream(photo.getPath());
-
-                fos.write(data);
-                fos.close();
-            }
-            catch (java.io.IOException e) {
-                e.printStackTrace();
-            }
-
-            return photo.getAbsolutePath();
-        }
-
-        @Override
-        protected void onPostExecute(String s){
-            Intent intent = new Intent();
-            intent.setAction(Intent.ACTION_VIEW);
-            intent.setDataAndType(Uri.fromFile(new File(s)), "image/*");
-            activity.startActivity(intent);
-        }
-
-    }
 
 	/**
 	 * GUI thread to send somebody joined notification

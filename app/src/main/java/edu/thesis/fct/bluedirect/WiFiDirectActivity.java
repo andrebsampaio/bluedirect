@@ -5,7 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.net.wifi.WifiConfiguration;
+import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pDevice;
@@ -13,7 +13,9 @@ import android.net.wifi.p2p.WifiP2pManager;
 import android.net.wifi.p2p.WifiP2pManager.ActionListener;
 import android.net.wifi.p2p.WifiP2pManager.Channel;
 import android.net.wifi.p2p.WifiP2pManager.ChannelListener;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.Menu;
@@ -23,14 +25,24 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.Toast;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+import edu.thesis.fct.bluedirect.bt.BluetoothBroadcastReceiver;
+import edu.thesis.fct.bluedirect.bt.BluetoothServer;
 import edu.thesis.fct.bluedirect.config.Configuration;
+import edu.thesis.fct.bluedirect.router.Packet;
+import edu.thesis.fct.bluedirect.router.Sender;
 import edu.thesis.fct.bluedirect.ui.DeviceDetailFragment;
 import edu.thesis.fct.bluedirect.ui.DeviceListFragment;
 import edu.thesis.fct.bluedirect.ui.PromptPasswordFragment;
 import edu.thesis.fct.bluedirect.ui.DeviceListFragment.DeviceActionListener;
-import edu.thesis.fct.bluedirect.wifi.WiFiBroadcastReceiver;
 import edu.thesis.fct.bluedirect.wifi.WiFiDirectBroadcastReceiver;
-import edu.thesis.fct.bluedirect.R;
 
 /**
  * An activity that uses WiFi Direct APIs to discover and connect with available
@@ -50,14 +62,18 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 
 	private final IntentFilter intentFilter = new IntentFilter();
 	private final IntentFilter wifiIntentFilter = new IntentFilter();
+	private final IntentFilter btIntentFilter = new IntentFilter();
 	private Channel channel;
 	private BroadcastReceiver receiver = null;
+	private BluetoothBroadcastReceiver btReceiver = null;
+	private BluetoothServer btServer;
 
 	WifiManager wifiManager;
-	WiFiBroadcastReceiver receiverWifi;
 	private boolean isWifiConnected;
 
 	public boolean isVisible = true;
+
+	WiFiDirectActivity context;
 
 	/**
 	 * @param isWifiP2pEnabled
@@ -75,6 +91,8 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.main);
 
+		context = this;
+
 		// add necessary intent values to be matched.
 		intentFilter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
 		intentFilter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
@@ -84,37 +102,34 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 		manager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
 		channel = manager.initialize(this, getMainLooper(), null);
 
-		if (Configuration.isDeviceBridgingEnabled) {
-			// Initiate wifi service manager
-			wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+		BluedirectAPI.addOnPacketReceivedListener(new onPacketReceivedListener() {
+			@Override
+			public void onPacketReceived(Packet p) {
+				if (p.getType().equals(Packet.TYPE.QUERY)) {
+					//If it's a message display the message and update the table if they're not there
+					// for whatever reason
+					final String message = p.getSenderMac() + " searched:\n" + new String(p.getData());
+					final String msg = new String(p.getData());
+					final String name = p.getSenderMac();
 
-			// Check for wifi is disabled
-			if (wifiManager.isWifiEnabled() == false) {
-				// If wifi disabled then enable it
-				Toast.makeText(getApplicationContext(), "wifi is disabled..making it enabled", Toast.LENGTH_LONG)
-						.show();
-				wifiManager.setWifiEnabled(true);
+					sendFiles(p.getSenderMac(), p.getBtSMac(), context);
+
+					context.runOnUiThread(new Runnable() {
+
+						@Override
+						public void run() {
+							if (context.isVisible) {
+								Toast.makeText(context, message, Toast.LENGTH_LONG).show();
+							} else {
+								MessageActivity.addMessage(name, msg);
+							}
+						}
+					});
+				} else {
+					new SavePhotoTask().execute(p.getData());
+				}
 			}
-
-			// wifi scaned value broadcast receiver
-			receiverWifi = new WiFiBroadcastReceiver(wifiManager, this, this.isWifiConnected);
-
-			// Register broadcast receiver
-			// Broacast receiver will automatically call when number of wifi
-			// connections changed
-			wifiIntentFilter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-			wifiIntentFilter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
-			wifiIntentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
-
-			registerReceiver(receiverWifi, wifiIntentFilter);
-
-			/*
-			 * This shouldn't be hard coded, but for our purposes we wanted to
-			 * demonstrate bridging.
-			 */
-			this.connectToAccessPoint("DIRECT-Sq-Android_ca89", "c5umx0mw");
-			// connectToAccessPoint(String ssid, String passphrase)
-		}
+		});
 
 		final Button button = (Button) findViewById(R.id.btn_switch);
 		button.setOnClickListener(new View.OnClickListener() {
@@ -124,6 +139,82 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 			}
 		});
 
+	}
+
+	private static void sendFiles(String rcvMac, String btRcvMac, Context context){
+		File file = new File(Environment.getExternalStorageDirectory() + File.separator + "photo.jpg");
+		Sender.queuePacket(new Packet(Packet.TYPE.FILE, fileToBytes(file), rcvMac, WiFiDirectBroadcastReceiver.MAC, btRcvMac, Configuration.getBluetoothSelfMac(context)));
+	}
+
+	class SavePhotoTask extends AsyncTask<byte[], String, String> {
+		@Override
+		protected String doInBackground(byte[]... params) {
+
+			ByteArrayInputStream bis = new ByteArrayInputStream(params[0]);
+			DataInputStream dis = new DataInputStream(bis);
+
+			String name = "";
+			byte [] data = null;
+			try {
+				name = dis.readUTF();
+
+				byte [] b = new byte[1024];
+				int len = 0;
+				ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+
+				while ((len = dis.read(b)) != -1) {
+					byteBuffer.write(b, 0, len);
+				}
+
+				data = byteBuffer.toByteArray();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			File photo=new File(Environment.getExternalStorageDirectory(), name +"");
+
+			if (photo.exists()) {
+				photo.delete();
+			}
+
+			try {
+				FileOutputStream fos=new FileOutputStream(photo.getPath());
+
+				fos.write(data);
+				fos.close();
+			}
+			catch (java.io.IOException e) {
+				e.printStackTrace();
+			}
+
+			return photo.getAbsolutePath();
+		}
+
+		@Override
+		protected void onPostExecute(String s){
+			Intent intent = new Intent();
+			intent.setAction(Intent.ACTION_VIEW);
+			intent.setDataAndType(Uri.fromFile(new File(s)), "image/*");
+			startActivity(intent);
+		}
+
+	}
+
+	private static byte[] fileToBytes(File file) {
+		FileInputStream fileInputStream = null;
+		byte[] bFile = new byte[(int) file.length()];
+		try
+		{
+			//convert file into array of bytes
+			fileInputStream = new FileInputStream(file);
+			fileInputStream.read(bFile);
+			fileInputStream.close();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+		return bFile;
 	}
 
 	/** register the BroadcastReceiver with the intent values to be matched */
@@ -313,42 +404,6 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 
 		PromptPasswordFragment ppf = new PromptPasswordFragment(this, ssid);
 		ppf.show(this.getFragmentManager(), ppf.getTag());
-
-	}
-
-	public void connectToAccessPoint(String ssid, String passphrase) {
-
-		Log.d(WiFiDirectActivity.TAG, "Trying to connect to AP : (" + ssid + "," + passphrase + ")");
-
-		WifiConfiguration wc = new WifiConfiguration();
-		wc.SSID = "\"" + ssid + "\"";
-		wc.preSharedKey = "\"" + passphrase + "\""; // "\""+passphrase+"\"";
-		wc.status = WifiConfiguration.Status.ENABLED;
-		wc.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP);
-		wc.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
-		wc.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK);
-		wc.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.TKIP);
-		wc.allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
-		wc.allowedProtocols.set(WifiConfiguration.Protocol.RSN);
-		// connect to and enable the connection
-		int netId = wifiManager.addNetwork(wc);
-		wifiManager.enableNetwork(netId, true);
-		wifiManager.setWifiEnabled(true);
-
-		Log.d(WiFiDirectActivity.TAG, "Connected? ip = " + wifiManager.getConnectionInfo().getIpAddress());
-		Log.d(WiFiDirectActivity.TAG, "Connected? bssid = " + wifiManager.getConnectionInfo().getBSSID());
-		Log.d(WiFiDirectActivity.TAG, "Connected? ssid = " + wifiManager.getConnectionInfo().getSSID());
-
-		if (wifiManager.getConnectionInfo().getIpAddress() != 0) {
-			this.isWifiConnected = true;
-			Toast.makeText(this, "Connected!!! ip = " + wifiManager.getConnectionInfo().getIpAddress(),
-					Toast.LENGTH_LONG).show();
-		} else {
-			Toast.makeText(
-					this,
-					"WiFi AP connection failed... ip = " + wifiManager.getConnectionInfo().getIpAddress() + "(" + ssid
-							+ "," + passphrase + ")", Toast.LENGTH_LONG).show();
-		}
 
 	}
 }

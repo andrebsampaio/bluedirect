@@ -9,6 +9,8 @@
         android:targetSdkVersion="19" />
 
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
@@ -37,7 +39,6 @@
             android:launchMode="singleTask" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
@@ -45,6 +46,14 @@
             android:name="edu.thesis.fct.bluedirect.MessageActivity"
             android:label="@string/title_activity_message" >
         </activity>
+        <receiver
+            android:name=".bt.BluetoothBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true" >
+            <intent-filter>
+                <action android:name="android.bluetooth.adapter.action.FOUND" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

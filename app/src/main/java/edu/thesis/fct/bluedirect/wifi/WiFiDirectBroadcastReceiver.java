@@ -17,6 +17,8 @@
 package edu.thesis.fct.bluedirect.wifi;
 
 import edu.thesis.fct.bluedirect.WiFiDirectActivity;
+import edu.thesis.fct.bluedirect.bt.BluetoothBroadcastReceiver;
+import edu.thesis.fct.bluedirect.bt.BluetoothServer;
 import edu.thesis.fct.bluedirect.config.Configuration;
 import edu.thesis.fct.bluedirect.router.AllEncompasingP2PClient;
 import edu.thesis.fct.bluedirect.router.MeshNetworkManager;
@@ -26,9 +28,12 @@ import edu.thesis.fct.bluedirect.ui.DeviceDetailFragment;
 import edu.thesis.fct.bluedirect.ui.DeviceListFragment;
 import edu.thesis.fct.bluedirect.R;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.net.NetworkInfo;
 import android.net.wifi.p2p.WifiP2pDevice;
 import android.net.wifi.p2p.WifiP2pGroup;
@@ -36,7 +41,10 @@ import android.net.wifi.p2p.WifiP2pManager;
 import android.net.wifi.p2p.WifiP2pManager.ActionListener;
 import android.net.wifi.p2p.WifiP2pManager.Channel;
 import android.net.wifi.p2p.WifiP2pManager.PeerListListener;
+import android.os.Build;
 import android.util.Log;
+
+import java.util.UUID;
 
 /**
  * A BroadcastReceiver that notifies of important wifi p2p events.
@@ -46,7 +54,8 @@ public class WiFiDirectBroadcastReceiver extends BroadcastReceiver {
 	private WifiP2pManager manager;
 	private Channel channel;
 	private WiFiDirectActivity activity;
-
+	public Receiver r;
+	public static String GID = UUID.randomUUID().toString();
 	public static String MAC;
 
 	/**
@@ -136,23 +145,30 @@ public class WiFiDirectBroadcastReceiver extends BroadcastReceiver {
 			MAC = ((WifiP2pDevice) intent.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)).deviceAddress;
 
 			//Set yourself on connection
-			MeshNetworkManager.setSelf(new AllEncompasingP2PClient(((WifiP2pDevice) intent
+			MeshNetworkManager.setSelf(new AllEncompasingP2PClient(Configuration.getBluetoothSelfMac(activity),((WifiP2pDevice) intent
 					.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)).deviceAddress, Configuration.GO_IP,
 					((WifiP2pDevice) intent.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)).deviceName,
-					((WifiP2pDevice) intent.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)).deviceAddress));
+					((WifiP2pDevice) intent.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)).deviceAddress,GID,null));
 
 			//Launch receiver and sender once connected to someone
 			if (!Receiver.running) {
-				Receiver r = new Receiver(this.activity);
+				r = new Receiver(this.activity);
 				new Thread(r).start();
 				Sender s = new Sender();
 				new Thread(s).start();
 			}
 
+
 			manager.requestGroupInfo(channel, new WifiP2pManager.GroupInfoListener() {
 				@Override
 				public void onGroupInfoAvailable(WifiP2pGroup group) {
 					if (group != null) {
+						if (group.isGroupOwner() && !BluetoothServer.running){
+							if (r != null){
+								Configuration.startBluetoothConnections(activity,r);
+							}
+
+						}
 						// clients require these
 						String ssid = group.getNetworkName();
 						String passphrase = group.getPassphrase();

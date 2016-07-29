@@ -53,6 +53,7 @@ public class MeshNetworkManager {
 		newClient(self);
 	}
 
+
 	/**
 	 * Either returns the IP in the current net if on the same one, or sends to
 	 * the relevant Group Owner or sends to all group owners if group owner not
@@ -60,45 +61,55 @@ public class MeshNetworkManager {
 	 * 
 	 * @param c
 	 */
-	public static String getIPForClient(AllEncompasingP2PClient c) {
+	public static IPBundle getIPForClient(AllEncompasingP2PClient c) {
 
 		/*
 		 * This is part of the same Group so its okay to use its IP
 		 */
-		if (self.getGroupOwnerMac() == c.getGroupOwnerMac()) {
-			// share the same GO then just give its IP
-			System.out.println("Have the same group owner, sending to :" + c.getIp());
-			return c.getIp();
-		}
 
-		AllEncompasingP2PClient go = routingTable.get(c.getGroupOwnerMac());
+		if (self.getGroupID().equals(c.getGroupID())) {
+			// share the same Group then just give its IP
+			if (self.getGroupOwnerMac().equals(c.getGroupOwnerMac())) {
+				System.out.println("Have the same group owner, sending to :" + c.getIp());
+				return new IPBundle(Packet.METHOD.WD, c.getIp());
+			}
 
-		//MUDAR ISTO PARA USAR BT! :D
+		} else {
+			//I am the bridge to the other group
+			if (self.getBridge().getGID().equals(c.getGroupID())) {
+				return new IPBundle(Packet.METHOD.BT, c.getBtmac());
+			}
 
-		// I am the group owner so can propagate
-		if (self.getGroupOwnerMac() == self.getMac()) {
-			if (self.getGroupOwnerMac() != c.getGroupOwnerMac() && go.getIsDirectLink()) {
-				// not the same group owner, but we have the group owner as a
-				// direct link
-				return c.getIp();
-			} else if (go != null && self.getGroupOwnerMac() != c.getGroupOwnerMac() && !go.getIsDirectLink()) {
-				for(AllEncompasingP2PClient aclient : routingTable.values()){
-					if(aclient.getGroupOwnerMac().equals(aclient.getMac())){
-						//try sending it to a random group owner
-						//can also expand this to all group owners
-						return aclient.getIp();
+			String ip = Configuration.GO_IP;
+
+			// Find a client that has a bridge with the other group
+			for (AllEncompasingP2PClient client : MeshNetworkManager.routingTable.values()) {
+				if (client.getGroupID().equals(self.getGroupID())) {
+					if (client.getBridge().getBTMac().equals(c.getBtmac())) {
+						return new IPBundle(Packet.METHOD.WD, client.getIp());
+					} else if (client.getBridge().getGID().equals(c.getGroupID())) {
+						ip = client.getIp();
 					}
 				}
-				//no other group owners, don't know who to send it to
-				return "0.0.0.0";
 			}
-		} else if (go != null) { // I am not the group owner - need to sent it to my GO
-			return Configuration.GO_IP;
+
+			// Send to a random group to expand
+			if (self.getGroupOwnerMac() == self.getMac() && ip.equals(Configuration.GO_IP)) {
+				IPBundle tmp = null;
+				for (AllEncompasingP2PClient client : MeshNetworkManager.routingTable.values()) {
+					if (client.getBridge().getGID() != self.getGroupID()) {
+						tmp = new IPBundle(Packet.METHOD.WD, client.getIp());
+						break;
+					}
+				}
+				if (tmp == null)
+					return new IPBundle(Packet.METHOD.WD, "0.0.0.0"); // No other groups - drop packet
+
+			}
+			return new IPBundle(Packet.METHOD.WD, ip);
 		}
 
-		//Will drop the packet
-		return "0.0.0.0";
-
+		return new IPBundle(Packet.METHOD.WD, "0.0.0.0");
 	}
 
 	/**
@@ -120,14 +131,24 @@ public class MeshNetworkManager {
 	 * De serialize a routing table and populate the existing one with the data
 	 * @param rtable
 	 */
-	public static void deserializeRoutingTableAndAdd(byte[] rtable) {
+	public static AllEncompasingP2PClient deserializeRoutingTableAndAdd(byte[] rtable) {
 		String rstring = new String(rtable);
 
 		String[] div = rstring.split("\n");
+		AllEncompasingP2PClient a = null;
 		for (String s : div) {
-			AllEncompasingP2PClient a = AllEncompasingP2PClient.fromString(s);
-			routingTable.put(a.getMac(), a);
+			a = AllEncompasingP2PClient.fromString(s);
+			AllEncompasingP2PClient b = routingTable.get(a);
+			if (b != null){
+				if (a.getLastUpdate().after(b.getLastUpdate())){
+					routingTable.put(a.getMac(), a);
+				}
+			} else {
+				routingTable.put(a.getMac(), a);
+			}
+
 		}
+		return a;
 	}
 
 	/**
@@ -137,12 +158,12 @@ public class MeshNetworkManager {
 	 * 
 	 * @param mac
 	 */
-	public static String getIPForClient(String mac) {
+	public static IPBundle getIPForClient(String mac) {
 
 		AllEncompasingP2PClient c = routingTable.get(mac);
 		if (c == null) {
 			System.out.println("NULL ENTRY in ROUTING TABLE FOR MAC");
-			return Configuration.GO_IP;
+			return new IPBundle(Packet.METHOD.WD,Configuration.GO_IP);
 		}
 
 		return getIPForClient(c);

@@ -2,6 +2,7 @@ package edu.thesis.fct.bluedirect.router;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import edu.thesis.fct.bluedirect.bt.BluetoothBroadcastReceiver;
 import edu.thesis.fct.bluedirect.config.Configuration;
 import edu.thesis.fct.bluedirect.router.tcp.TcpSender;
 
@@ -50,8 +51,13 @@ public class Sender implements Runnable {
 			}
 
 			Packet p = ccl.remove();
-			String ip = MeshNetworkManager.getIPForClient(p.getMac());
-			packetSender.sendPacket(ip, Configuration.RECEIVE_PORT, p);
+			IPBundle bundle = MeshNetworkManager.getIPForClient(p.getMac());
+
+			if (bundle.getMethod().equals(Packet.METHOD.WD)){
+				packetSender.sendPacket(bundle.getAddress(), Configuration.RECEIVE_PORT, p);
+			} else {
+				BluetoothBroadcastReceiver.btSender.sendPacket(bundle.getAddress(),p,true);
+			}
 
 		}
 	}

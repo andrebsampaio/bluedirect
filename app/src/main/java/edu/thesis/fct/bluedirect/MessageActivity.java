@@ -1,5 +1,6 @@
 package edu.thesis.fct.bluedirect;
 
+import edu.thesis.fct.bluedirect.config.Configuration;
 import edu.thesis.fct.bluedirect.router.AllEncompasingP2PClient;
 import edu.thesis.fct.bluedirect.router.MeshNetworkManager;
 import edu.thesis.fct.bluedirect.router.Packet;
@@ -7,6 +8,7 @@ import edu.thesis.fct.bluedirect.router.Sender;
 import edu.thesis.fct.bluedirect.wifi.WiFiDirectBroadcastReceiver;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
@@ -36,6 +38,8 @@ public class MessageActivity extends Activity {
 
     private static final int SELECT_PICTURE = 1;
 
+    private Context activity;
+
 	/**
 	 * Add appropriate listeners on creation
 	 */
@@ -43,6 +47,8 @@ public class MessageActivity extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.message);
+
+        activity = this;
 
 		messageView = (TextView) findViewById(R.id.message_view);
 
@@ -59,12 +65,7 @@ public class MessageActivity extends Activity {
 				message.setText("");
 
 				// Send to other clients as a group chat message
-				for (AllEncompasingP2PClient c : MeshNetworkManager.routingTable.values()) {
-					if (c.getMac().equals(MeshNetworkManager.getSelf().getMac()))
-						continue;
-					Sender.queuePacket(new Packet(Packet.TYPE.QUERY, msgStr.getBytes(), c.getMac(),
-							WiFiDirectBroadcastReceiver.MAC));
-				}
+				BluedirectAPI.broadcastQuery(msgStr,activity);
 
 			}
 		});
@@ -89,12 +90,7 @@ public class MessageActivity extends Activity {
 
                 byte [] file = UriToBytes(selectedImageUri);
                 // Send to other clients as a group chat message
-                for (AllEncompasingP2PClient c : MeshNetworkManager.routingTable.values()) {
-                    if (c.getMac().equals(MeshNetworkManager.getSelf().getMac()))
-                        continue;
-                    Sender.queuePacket(new Packet(Packet.TYPE.FILE, file, c.getMac(),
-                            WiFiDirectBroadcastReceiver.MAC));
-                }
+                BluedirectAPI.broadcastFile(file,activity);
 
             }
         }

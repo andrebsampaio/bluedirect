@@ -17,6 +17,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import edu.thesis.fct.bluedirect.WiFiDirectActivity;
+import edu.thesis.fct.bluedirect.config.Configuration;
 import edu.thesis.fct.bluedirect.router.AllEncompasingP2PClient;
 import edu.thesis.fct.bluedirect.router.MeshNetworkManager;
 import edu.thesis.fct.bluedirect.router.Packet;
@@ -119,7 +120,7 @@ public class DeviceDetailFragment extends Fragment implements ConnectionInfoList
 		this.getView().setVisibility(View.VISIBLE);
 
 		if (!info.isGroupOwner) {
-			Sender.queuePacket(new Packet(Packet.TYPE.HELLO, new byte[0], null, WiFiDirectBroadcastReceiver.MAC));
+			Sender.queuePacket(new Packet(Packet.TYPE.HELLO, new byte[0], null, WiFiDirectBroadcastReceiver.MAC,null, Configuration.getBluetoothSelfMac(getActivity())));
 		}
 
 		// hide the connect button

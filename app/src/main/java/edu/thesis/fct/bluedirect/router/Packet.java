@@ -13,14 +13,43 @@ public class Packet {
 	 *
 	 */
 	public enum TYPE {
-		HELLO, HELLO_ACK, BYE, QUERY, UPDATE, FILE
+		HELLO, HELLO_ACK, BYE, QUERY, UPDATE, HELLO_BT, FILE
+	};
+
+	public enum METHOD {
+		WD,BT
 	};
 
 	private byte[] data;
 	private Packet.TYPE type;
+
+
 	private String receiverMac;
 	private String senderMac;
 	private String senderIP;
+
+
+    public String getBtRMac() {
+        return btRMac;
+    }
+
+
+
+    public void setBtRMac(String btRMac) {
+        this.btRMac = btRMac;
+    }
+
+    private String btRMac;
+
+    public String getBtSMac() {
+        return btSMac;
+    }
+
+    public void setBtSMac(String btSMac) {
+        this.btSMac = btSMac;
+    }
+
+    private String btSMac;
 	private int ttl;
 
 	/**
@@ -30,7 +59,7 @@ public class Packet {
 	 * @param receiverMac
 	 * @param senderMac
 	 */
-	public Packet(Packet.TYPE type, byte[] extraData, String receiverMac, String senderMac) {
+	public Packet(Packet.TYPE type, byte[] extraData, String receiverMac, String senderMac, String btRMac, String btSMac) {
 		this.setData(extraData);
 		this.setType(type);
 		this.receiverMac = receiverMac;
@@ -38,6 +67,11 @@ public class Packet {
 		if (receiverMac == null)
 			this.receiverMac = "00:00:00:00:00:00";
 		this.senderMac = senderMac;
+        this.btRMac = btRMac;
+		if (btRMac == null){
+			this.btRMac = "00:00:00:00:00:00";
+		}
+        this.btSMac = btSMac;
 	}
 
 	/**
@@ -48,7 +82,7 @@ public class Packet {
 	 * @param senderMac
 	 * @param timetolive
 	 */
-	public Packet(TYPE type2, byte[] eData, String receivermac, String senderMac, int timetolive) {
+	public Packet(TYPE type2, byte[] eData, String receivermac, String senderMac, String btRMac, String btSMac, int timetolive) {
 		this.setData(eData);
 		this.setType(type2);
 		this.receiverMac = receivermac;
@@ -56,6 +90,8 @@ public class Packet {
 			this.receiverMac = "00:00:00:00:00:00";
 		this.senderMac = senderMac;
 		this.ttl = timetolive;
+        this.btRMac = btRMac;
+        this.btSMac = btSMac;
 	}
 
 	/**
@@ -129,7 +165,7 @@ public class Packet {
 	public byte[] serialize() {
 
 		// 6 bytes for mac
-		byte[] serialized = new byte[1 + data.length + 13];
+		byte[] serialized = new byte[1 + data.length + 26];
 		serialized[0] = (byte) type.ordinal();
 
 		serialized[1] = (byte) ttl;
@@ -144,8 +180,21 @@ public class Packet {
 		for (int i = 8; i <= 13; i++) {
 			serialized[i] = mac[i - 8];
 		}
-		for (int i = 14; i < serialized.length; i++) {
-			serialized[i] = data[i - 14];
+
+        mac = getMacAsBytes(this.btRMac);
+
+        for (int i = 14; i <= 19; i++) {
+            serialized[i] = mac[i - 14];
+        }
+
+        mac = getMacAsBytes(this.btSMac);
+
+        for (int i = 20; i <= 25; i++) {
+            serialized[i] = mac[i - 20];
+        }
+
+		for (int i = 27; i < serialized.length; i++) {
+			serialized[i] = data[i - 27];
 		}
 		return serialized;
 	}
@@ -158,15 +207,17 @@ public class Packet {
 	public static Packet deserialize(byte[] inputData) {
 		Packet.TYPE type = TYPE.values()[(int) inputData[0]];
 
-		byte[] data = new byte[inputData.length - 14];
+		byte[] data = new byte[inputData.length - 27];
 		int timetolive = (int) inputData[1];
 		String mac = getMacBytesAsString(inputData, 2);
 		String receivermac = getMacBytesAsString(inputData, 8);
+        String btReceivemac = getMacBytesAsString(inputData, 14);
+        String btSendmac = getMacBytesAsString(inputData, 20);
 
-		for (int i = 14; i < inputData.length; i++) {
-			data[i - 14] = inputData[i];
+		for (int i = 27; i < inputData.length; i++) {
+			data[i - 27] = inputData[i];
 		}
-		return new Packet(type, data, mac, receivermac, timetolive);
+		return new Packet(type, data, mac, receivermac,btReceivemac, btSendmac, timetolive);
 	}
 
 	/**

@@ -1,5 +1,11 @@
 package edu.thesis.fct.bluedirect.router;
 
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 /**
  * This is an alternative representation the Android P2P library's WiFiP2PDevice class
  * it contains information about any client connected to the mesh and is stored in
@@ -8,6 +14,23 @@ package edu.thesis.fct.bluedirect.router;
  *
  */
 public class AllEncompasingP2PClient {
+
+
+	/**
+	 * The client's bt mac address
+	 */
+	private String btmac;
+
+	public Date getLastUpdate() {
+		return lastUpdate;
+	}
+
+
+	public void setLastUpdate(Date lastUpdate) {
+		this.lastUpdate = lastUpdate;
+	}
+
+	private Date lastUpdate;
 
 	/**
 	 * The client's mac address
@@ -23,43 +46,63 @@ public class AllEncompasingP2PClient {
 	 * The client's GO mac address, for routing
 	 */
 	private String groupOwnerMac;
-	
+
+	private String GroupID;
+
 	/**
 	 * The client's IP address
 	 */
 	private String ip;
-	
-	/**
-	 * Whether it is a direct link or not, this could help with making routing more efficient
-	 */
-	private boolean isDirectLink;
+
+	public Bridge getBridge() {
+		return bridge;
+	}
+
+	public void setBridge(Bridge bridge) {
+		this.bridge = bridge;
+	}
+
+	private Bridge bridge;
 
 	/**
 	 * Constructor
 	 */
-	public AllEncompasingP2PClient(String mac_address, String ip, String name, String groupOwner) {
+	public AllEncompasingP2PClient(String btmac, String mac_address, String ip, String name, String groupOwner,String groupID, String date) {
 		this.setMac(mac_address);
 		this.setName(name);
 		this.setIp(ip);
 		this.setGroupOwnerMac(groupOwner);
-		this.isDirectLink = true;
+		this.setBtmac(btmac);
+		this.setGroupID(groupID);
+		this.lastUpdate = initTimeStamp(date);
 	}
 
-	/**
-	 * Change this if we don't have a direct link
-	 * 
-	 * @param d
-	 */
-	public void setIsDirectLink(boolean d) {
-		this.isDirectLink = d;
+	public AllEncompasingP2PClient(String btmac, String mac_address, String ip, String name, String groupOwner,String groupID, Bridge bridge, String date) {
+		this.setMac(mac_address);
+		this.setName(name);
+		this.setIp(ip);
+		this.setGroupOwnerMac(groupOwner);
+		this.setBtmac(btmac);
+		this.bridge = bridge;
+		this.setGroupID(groupID);
+
+		this.lastUpdate = initTimeStamp(date);
 	}
 
-	/**
-	 * Get if have a direct link to this client from the current running client
-	 * @return
-	 */
-	public boolean getIsDirectLink() {
-		return this.isDirectLink;
+	public String getGroupID() {
+		return GroupID;
+	}
+
+	public void setGroupID(String groupID) {
+		GroupID = groupID;
+	}
+
+	public String getBtmac() {
+		return btmac;
+	}
+
+	public void setBtmac(String btmac) {
+		this.btmac = btmac;
 	}
 
 	/**
@@ -133,17 +176,53 @@ public class AllEncompasingP2PClient {
 	 */
 	@Override
 	public String toString() {
-		return getIp() + "," + getMac() + "," + getName() + "," + getGroupOwnerMac();
+		String toString;
+		if (this.getBridge() == null){
+				toString = getIp() + "," + getBtmac() + "," + getMac() + "," + getName() + "," + getGroupOwnerMac() + "," + getGroupID()
+						+ "," + "null" + "," + "null" + "," + lastUpdate.toString();
+		} else {
+			toString = getIp() + "," + getBtmac() + "," + getMac() + "," + getName() + "," + getGroupOwnerMac() + "," + getGroupID()
+					+ "," + getBridge().getBTMac() + "," + getBridge().getGID() + "," + lastUpdate.toString();
+		}
+		return toString;
 	}
 
 	/**
-	 * Generate a client object from a serializerd string
+	 * Generate a client object from a serialized string
 	 * @param serialized
 	 * @return
 	 */
 	public static AllEncompasingP2PClient fromString(String serialized) {
 		String[] divided = serialized.split(",");
-		return new AllEncompasingP2PClient(divided[1], divided[0], divided[2], divided[3]);
+		if (divided[6].equals("null") || divided[7].equals("null")){
+			divided[6] = null;
+			divided[7] = null;
+		}
+		return new AllEncompasingP2PClient(divided[1], divided[2], divided[0], divided[3], divided[4],divided[5], new Bridge(divided[6],divided[7]),divided[8]);
 	}
+
+	private static String getCurrentTimeStamp() {
+		return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date());
+	}
+
+	private static Date initTimeStamp(String date){
+		Date dateInit = null;
+		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+		try {
+			if (date == null || date.equals("null")){
+				dateInit = simpleDateFormat.parse(getCurrentTimeStamp());
+			} else {
+				dateInit = simpleDateFormat.parse(date);
+			}
+
+		}catch (ParseException e){
+			e.printStackTrace();
+		}
+		return dateInit;
+	}
+
+
+
+
 
 }
