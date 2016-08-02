@@ -29,6 +29,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import edu.thesis.fct.bluedirect.WiFiDirectActivity;
 import edu.thesis.fct.bluedirect.router.MeshNetworkManager;
 import edu.thesis.fct.bluedirect.router.Packet;
 
@@ -40,7 +41,7 @@ public class BluetoothBroadcastReceiver extends BroadcastReceiver {
     private static final UUID UUID_KEY = UUID.fromString("fa87c0d0-afac-11de-8a39-0800200c9a66");
     private BluetoothAdapter mBluetoothAdapter;
     private Queue<BluetoothDevice> foundDevices = new LinkedList<>();
-    public static BTSender btSender = null;
+    private List<String> seenDevices = new LinkedList<>();
     public BluetoothBroadcastReceiver(){
         super();
     }
@@ -50,7 +51,6 @@ public class BluetoothBroadcastReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         final BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        btSender = new BTSender();
 
         if (BluetoothDevice.ACTION_FOUND.equals(action)) {
             for (BluetoothDevice d : foundDevices){
@@ -67,7 +67,7 @@ public class BluetoothBroadcastReceiver extends BroadcastReceiver {
             new Thread()
             {
                 public void run() {
-                    while (!BluetoothServer.bridgeEstablished){
+                    while (WiFiDirectActivity.btService.bridge == null){
                         if (foundDevices.isEmpty()){
                             try {
                                 this.sleep(2000);
@@ -86,13 +86,20 @@ public class BluetoothBroadcastReceiver extends BroadcastReceiver {
                         }
                         while (!foundDevices.isEmpty()){
                             BluetoothDevice deviceTmp = foundDevices.remove();
-                            if (MeshNetworkManager.getSelf() != null && !BluetoothServer.establishingBridge && !btSender.establishingBridge){
+                            /*if (MeshNetworkManager.getSelf() != null && !BluetoothServer.establishingBridge && !btSender.establishingBridge){
                                 btSender.sendPacket(deviceTmp.getAddress(),MeshNetworkManager.getSelf().getGroupID(),false);
+                            }*/
+
+                            if (WiFiDirectActivity.btService.getState() != BTService.STATE_CONNECTED && !seenDevices.contains(deviceTmp.getAddress())){
+                                WiFiDirectActivity.btService.connect(deviceTmp,true);
+                                seenDevices.add(deviceTmp.getAddress());
                             }
                         }
                     }
                 }
             }.start();
+
+
 
         }
         else if (BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED.equals(action)) {

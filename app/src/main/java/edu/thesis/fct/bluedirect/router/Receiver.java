@@ -36,10 +36,10 @@ public class Receiver implements Runnable {
 	 */
 	public static boolean running = false;
 
-	private static List<onPacketReceivedListener> listeners = new ArrayList<onPacketReceivedListener>();
+	private static onPacketReceivedListener listener;
 
-	public static void addListener(onPacketReceivedListener toAdd){
-		listeners.add(toAdd);
+	public static void setListener(onPacketReceivedListener toAdd){
+		listener = toAdd;
 	}
 
 	/*
@@ -105,16 +105,16 @@ public class Receiver implements Runnable {
 				for (AllEncompasingP2PClient c : MeshNetworkManager.routingTable.values()) {
 					if (c.getMac().equals(MeshNetworkManager.getSelf().getMac()) || c.getMac().equals(p.getSenderMac()))
 						continue;
-					byte[] macs = new byte[13];
+					byte[] macs = new byte[12];
 
 					byte[] wMac = Packet.getMacAsBytes(p.getSenderMac());
 					for (int i = 0; i <= 5; i++) {
-						macs[i] = wMac[i - 5];
+						macs[i] = wMac[i];
 					}
 
 					wMac = Packet.getMacAsBytes(p.getBtSMac());
-					for (int i = 6; i <= 13; i++) {
-						macs[i] = wMac[i - 13];
+					for (int i = 6; i < 12; i++) {
+						macs[i] = wMac[i - 6];
 					}
 
 					Packet update = new Packet(Packet.TYPE.UPDATE, macs, c.getMac(),
@@ -144,8 +144,8 @@ public class Receiver implements Runnable {
 						MeshNetworkManager.getSelf().setGroupID(a.getGroupID());
 						somebodyJoined(p.getSenderMac());
 						updatePeerList();
-						if (!BluetoothServer.running)
-							Configuration.startBluetoothConnections(activity,this);
+						if (WiFiDirectActivity.btService == null)
+							WiFiDirectActivity.btService = Configuration.startBluetoothConnections(activity,this);
 					} else if (p.getType().equals(Packet.TYPE.UPDATE)) {
 						//if it's an update, add to the table
 						String emb_mac = Packet.getMacBytesAsString(p.getData(), 0);
@@ -171,9 +171,8 @@ public class Receiver implements Runnable {
 
 					} else if (p.getType().equals(Packet.TYPE.QUERY) || p.getType().equals(Packet.TYPE.FILE)) {
 
-						for (onPacketReceivedListener l : listeners){
-							l.onPacketReceived(p);
-						}
+
+						listener.onPacketReceived(p);
 
 						if (!MeshNetworkManager.routingTable.contains(p.getSenderMac())) {
 							/*

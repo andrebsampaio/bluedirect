@@ -1,11 +1,5 @@
 package edu.thesis.fct.bluedirect.router;
 
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-
 /**
  * This is an alternative representation the Android P2P library's WiFiP2PDevice class
  * it contains information about any client connected to the mesh and is stored in
@@ -21,16 +15,16 @@ public class AllEncompasingP2PClient {
 	 */
 	private String btmac;
 
-	public Date getLastUpdate() {
+	public Long getLastUpdate() {
 		return lastUpdate;
 	}
 
 
-	public void setLastUpdate(Date lastUpdate) {
+	public void setLastUpdate(Long lastUpdate) {
 		this.lastUpdate = lastUpdate;
 	}
 
-	private Date lastUpdate;
+	private Long lastUpdate;
 
 	/**
 	 * The client's mac address
@@ -67,17 +61,17 @@ public class AllEncompasingP2PClient {
 	/**
 	 * Constructor
 	 */
-	public AllEncompasingP2PClient(String btmac, String mac_address, String ip, String name, String groupOwner,String groupID, String date) {
+	public AllEncompasingP2PClient(String btmac, String mac_address, String ip, String name, String groupOwner,String groupID, String timestamp) {
 		this.setMac(mac_address);
 		this.setName(name);
 		this.setIp(ip);
 		this.setGroupOwnerMac(groupOwner);
 		this.setBtmac(btmac);
 		this.setGroupID(groupID);
-		this.lastUpdate = initTimeStamp(date);
+		this.lastUpdate = initTimeStamp(timestamp);
 	}
 
-	public AllEncompasingP2PClient(String btmac, String mac_address, String ip, String name, String groupOwner,String groupID, Bridge bridge, String date) {
+	public AllEncompasingP2PClient(String btmac, String mac_address, String ip, String name, String groupOwner,String groupID, Bridge bridge, String timestamp) {
 		this.setMac(mac_address);
 		this.setName(name);
 		this.setIp(ip);
@@ -86,7 +80,7 @@ public class AllEncompasingP2PClient {
 		this.bridge = bridge;
 		this.setGroupID(groupID);
 
-		this.lastUpdate = initTimeStamp(date);
+		this.lastUpdate = initTimeStamp(timestamp);
 	}
 
 	public String getGroupID() {
@@ -198,27 +192,18 @@ public class AllEncompasingP2PClient {
 			divided[6] = null;
 			divided[7] = null;
 		}
-		return new AllEncompasingP2PClient(divided[1], divided[2], divided[0], divided[3], divided[4],divided[5], new Bridge(divided[6],divided[7]),divided[8]);
+		return new AllEncompasingP2PClient(divided[1], divided[2], divided[0], divided[3], divided[4],divided[5], new Bridge(divided[7],divided[6]),divided[8]);
 	}
 
-	private static String getCurrentTimeStamp() {
-		return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date());
-	}
-
-	private static Date initTimeStamp(String date){
-		Date dateInit = null;
-		SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-		try {
-			if (date == null || date.equals("null")){
-				dateInit = simpleDateFormat.parse(getCurrentTimeStamp());
-			} else {
-				dateInit = simpleDateFormat.parse(date);
-			}
-
-		}catch (ParseException e){
-			e.printStackTrace();
+	private static Long initTimeStamp(String timestamp) {
+		if (timestamp == null || timestamp.equals("null")){
+			return getUnixCurrentTime();
 		}
-		return dateInit;
+		return Long.valueOf(timestamp);
+	}
+
+	public static Long getUnixCurrentTime(){
+		return System.currentTimeMillis();
 	}
 
 

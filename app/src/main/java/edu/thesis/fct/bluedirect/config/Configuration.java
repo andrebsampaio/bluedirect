@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Build;
 
+import edu.thesis.fct.bluedirect.bt.BTService;
 import edu.thesis.fct.bluedirect.bt.BluetoothBroadcastReceiver;
 import edu.thesis.fct.bluedirect.bt.BluetoothServer;
 import edu.thesis.fct.bluedirect.router.Receiver;
@@ -72,16 +73,21 @@ public class Configuration {
 		BluetoothAdapter.getDefaultAdapter().startDiscovery();
 	}
 
-	public static void startBluetoothConnections(Context activity, Receiver r){
+	public static BTService startBluetoothConnections(Context activity, Receiver r){
 		Configuration.setBluetooth(true);
 		Configuration.ensureDiscoverable(activity);
 
-		if (!BluetoothServer.running && Build.MANUFACTURER.contains("samsung")){
+		/*if (!BluetoothServer.running){
 			BluetoothServer btServer = new BluetoothServer(activity,r.packetQueue);
 			new Thread(btServer).start();
-		}
+		}*/
+
+		BTService btService = new BTService(activity, r.packetQueue );
+		btService.start();
 
 		Configuration.setBluetoothBroadcast(activity);
+
+		return btService;
 	}
 
 }

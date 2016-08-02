@@ -67,6 +67,7 @@ public class MeshNetworkManager {
 		 * This is part of the same Group so its okay to use its IP
 		 */
 
+
 		if (self.getGroupID().equals(c.getGroupID())) {
 			// share the same Group then just give its IP
 			if (self.getGroupOwnerMac().equals(c.getGroupOwnerMac())) {
@@ -76,7 +77,7 @@ public class MeshNetworkManager {
 
 		} else {
 			//I am the bridge to the other group
-			if (self.getBridge().getGID().equals(c.getGroupID())) {
+			if (self.getBridge() != null && self.getBridge().getGID().equals(c.getGroupID())) {
 				return new IPBundle(Packet.METHOD.BT, c.getBtmac());
 			}
 
@@ -138,9 +139,9 @@ public class MeshNetworkManager {
 		AllEncompasingP2PClient a = null;
 		for (String s : div) {
 			a = AllEncompasingP2PClient.fromString(s);
-			AllEncompasingP2PClient b = routingTable.get(a);
+			AllEncompasingP2PClient b = routingTable.get(a.getMac());
 			if (b != null){
-				if (a.getLastUpdate().after(b.getLastUpdate())){
+				if (a.getLastUpdate() > b.getLastUpdate()){
 					routingTable.put(a.getMac(), a);
 				}
 			} else {

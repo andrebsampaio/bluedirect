@@ -33,6 +33,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
+import edu.thesis.fct.bluedirect.bt.BTService;
 import edu.thesis.fct.bluedirect.bt.BluetoothBroadcastReceiver;
 import edu.thesis.fct.bluedirect.bt.BluetoothServer;
 import edu.thesis.fct.bluedirect.config.Configuration;
@@ -68,6 +69,8 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 	private BluetoothBroadcastReceiver btReceiver = null;
 	private BluetoothServer btServer;
 
+	public static BTService btService = null;
+
 	WifiManager wifiManager;
 	private boolean isWifiConnected;
 
@@ -102,7 +105,7 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 		manager = (WifiP2pManager) getSystemService(Context.WIFI_P2P_SERVICE);
 		channel = manager.initialize(this, getMainLooper(), null);
 
-		BluedirectAPI.addOnPacketReceivedListener(new onPacketReceivedListener() {
+		BluedirectAPI.setOnPacketReceivedListener(new onPacketReceivedListener() {
 			@Override
 			public void onPacketReceived(Packet p) {
 				if (p.getType().equals(Packet.TYPE.QUERY)) {
@@ -112,7 +115,7 @@ public class WiFiDirectActivity extends Activity implements ChannelListener, Dev
 					final String msg = new String(p.getData());
 					final String name = p.getSenderMac();
 
-					sendFiles(p.getSenderMac(), p.getBtSMac(), context);
+					//sendFiles(p.getSenderMac(), p.getBtSMac(), context);
 
 					context.runOnUiThread(new Runnable() {
 

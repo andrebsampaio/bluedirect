@@ -163,9 +163,9 @@ public class WiFiDirectBroadcastReceiver extends BroadcastReceiver {
 				@Override
 				public void onGroupInfoAvailable(WifiP2pGroup group) {
 					if (group != null) {
-						if (group.isGroupOwner() && !BluetoothServer.running){
+						if (group.isGroupOwner() && WiFiDirectActivity.btService == null){
 							if (r != null){
-								Configuration.startBluetoothConnections(activity,r);
+								WiFiDirectActivity.btService = Configuration.startBluetoothConnections(activity,r);
 							}
 
 						}

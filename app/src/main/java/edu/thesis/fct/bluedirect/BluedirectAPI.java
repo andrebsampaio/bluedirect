@@ -34,8 +34,8 @@ public class BluedirectAPI {
         }
     }
 
-    public static void addOnPacketReceivedListener(onPacketReceivedListener listener){
-        Receiver.addListener(listener);
+    public static void setOnPacketReceivedListener(onPacketReceivedListener listener){
+        Receiver.setListener(listener);
     }
 
 

@@ -51,6 +51,8 @@ public class BluetoothServer implements Runnable {
 
     private static Bridge currentBridge;
 
+    private static BluetoothSocket socket;
+
     Context context;
 
     public BluetoothServer(Context context, ConcurrentLinkedQueue<Packet> packetQueue){
@@ -60,7 +62,7 @@ public class BluetoothServer implements Runnable {
         this.context = context;
         this.packetQueue = packetQueue;
         try {
-            temp = mBluetoothAdapter.listenUsingRfcommWithServiceRecord("Hyrax", UUID_KEY);
+            temp = mBluetoothAdapter.listenUsingInsecureRfcommWithServiceRecord("Hyrax", UUID_KEY);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -73,7 +75,6 @@ public class BluetoothServer implements Runnable {
     }
 
     public void run() {
-        BluetoothSocket socket;
         System.out.println("SERVER STARTED");
         while (true) {
             try {
@@ -84,6 +85,12 @@ public class BluetoothServer implements Runnable {
                         establishingBridge = true;
                         ConnectedThread connected = new ConnectedThread(socket, null);
                         connected.start();
+                        try {
+                            connected.join();
+                            socket.close();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                     } else if (currentBridge.getBTMac().equals(address)){
                         ConnectedThread connected = new ConnectedThread(socket, currentBridge);
                         connected.start();
@@ -134,6 +141,7 @@ public class BluetoothServer implements Runnable {
                             AllEncompasingP2PClient self = MeshNetworkManager.getSelf();
                             bridge = new Bridge(GID, mSocket.getRemoteDevice().getAddress());
                             self.setBridge(bridge);
+                            self.setLastUpdate(AllEncompasingP2PClient.getUnixCurrentTime());
                             MeshNetworkManager.setSelf(self);
                             setCurrentBridge(bridge);
                             byte [] table = MeshNetworkManager.serializeRoutingTable();
@@ -143,6 +151,7 @@ public class BluetoothServer implements Runnable {
                             byte [] rcvTable = new byte[tableSize];
                             input.readFully(rcvTable);
                             MeshNetworkManager.deserializeRoutingTableAndAdd(rcvTable);
+                            output.writeBoolean(true);
                         } else {
                             throw new SameGroupException();
                         }
@@ -159,9 +168,11 @@ public class BluetoothServer implements Runnable {
 
                         byte trimmedBytes[] = baos.toByteArray();
                         Packet p = Packet.deserialize(trimmedBytes);
-                        p.setSenderIP(null);
+                        p.setSenderIP(p.getSenderIP());
                         packetQueue.add(p);
-                        mSocket.close();
+                        output.writeBoolean(true);
+                        //
+                        // mSocket.close();
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
